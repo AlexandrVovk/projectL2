@@ -6,9 +6,9 @@ sestatus && setenforce 0 && sestatus
 sed -i 's/SELINUX=enabled/SELINUX=disabled/' /etc/selinux/config
 sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
 
-yum -y update
+#yum -y update
 ln -sf /usr/share/zoneinfo/Europe/Kiev /etc/localtime
-yum install -y  ntpdate net-tools vim wget curl lynx
+yum install -y  ntpdate net-tools vim wget curl lynx htop
 ntpdate time.in.ua
 yum install -y epel-release yum-utils && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el7.repo
 #yum install -y epel-release && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el`rpm -q --qf "%{VERSION}" $(rpm -q --whatprovides redhat-release)`.repo
@@ -48,7 +48,7 @@ echo "<VirtualHost *:80>
 
 
 
-sed -i 's/#ServerName www.example.com:80/ServerName dokuwiki.tk/' /etc/httpd/conf/httpd.conf
+sed -i 's/#ServerName www.example.com:80/ServerName vovk.ml/' /etc/httpd/conf/httpd.conf
 sed -i "s/DocumentRoot \"\/var\/www\/html\"/DocumentRoot \"\/var\/project\/\"/" /etc/httpd/conf/httpd.conf
 
 #vim /etc/httpd/conf/httpd.conf
@@ -84,7 +84,7 @@ yum-config-manager --enable remi-php71
 yum repolist all
 yum info php
 
-#yum install -y php php-mcrypt php-cli php-gd php-curl php-mysql php-ldap php-zip php-fileinfo
+#yum install -y php php-mcrypt php-cli php-gd php-curl php-mysql php-ldap php-zip php-fileinfo  php-xml
 
 yum -y install php php-opcache
 php -v
@@ -111,8 +111,8 @@ Action application/x-httpd-php /cgi-bin/php-cgi
 mkdir /var/project/cgi-bin/ &&  cp /usr/bin/php-cgi /var/project/cgi-bin/php-cgi
 
  
- mv /etc/httpd/conf.d/php.conf /etc/httpd/conf.d/php.conf.bkp
- mv /etc/httpd/conf.modules.d/15-php.conf /etc/httpd/conf.modules.d/15-php.confff
+# mv /etc/httpd/conf.d/php.conf /etc/httpd/conf.d/php.conf.bkp
+# mv /etc/httpd/conf.modules.d/15-php.conf /etc/httpd/conf.modules.d/15-php.confff
  
  
 systemctl restart httpd
@@ -143,11 +143,12 @@ AuthUserFile /var/project/dokuwiki.tk/.htpasswd
 Require valid-user"  > .htaccess
 
 
-vim /etc/httpd/conf/httpd.conf
+#vim /etc/httpd/conf/httpd.conf
 
+echo '
 <Directory "/var/project/dokuwiki.tk">
 AllowOverride AuthConfig
-</Directory>
+</Directory>' >> /etc/httpd/conf/httpd.conf
 
 apachectl -t && systemctl restart httpd
 
@@ -156,7 +157,7 @@ https://www.golinuxhub.com/2018/04/how-to-set-up-password-authentication-htpassw
 
 
 ---server-status---
-vim /etc/httpd/conf/httpd.conf
+#vim /etc/httpd/conf/httpd.conf
 
 echo '<IfModule mod_status.c>
     ExtendedStatus On
@@ -189,7 +190,7 @@ enabled=1' > /etc/yum.repos.d/nginx.repo
 
 
 yum install -y nginx
-systemctl enable  nginx && systemctl restart  nginx
+systemctl enable  nginx && systemctl start  nginx
 
 
 echo 'server {
@@ -248,10 +249,9 @@ curl -IL -u dokuwiki:dokuwiki -H "Accept-Encoding: gzip, deflate" dokuwiki.tk
 
 ---php-fpm---
 
-yum install php72-php-fpm
+yum install php72-php-fpm php72-php-mysqlnd php72-php-gd
 
-groupadd -g 2000 blog
-useradd -u 2000 -s /bin/false -d /dev/null -g blog blog
+groupadd -g 2000 blog && useradd -u 2000 -s /bin/false -d /dev/null -g blog blog
 
 #useradd -d /dev/null0 -s /sbin/nologin blog
 
@@ -318,10 +318,10 @@ cp -Rdp wordpress/* vovk.ml/
  wget http://repo.mysql.com/mysql-community-release-el7-5.noarch.rpm
  rpm -ivh mysql-community-release-el7-5.noarch.rpm
 
-yum update
-yum install mysql-server
+#yum update
+yum install mysql-server -y
 
-systemctl start mysqld && systemctl enable mysqld
+systemctl start mysqld && systemctl enable mysqld 
 
 mysql_secure_installation
 
@@ -339,10 +339,11 @@ systemctl restart mysql
 
 cd /var/project/vovk.ml/ && cp wp-config-sample.php wp-config.php
 
-vim wp-config.php
+sed -i "s/database_name_here/wordpress_db/;s/username_here/wordpress_usr/;s/password_here/wordpress_passwd/" wp-config.php
 
-yum install php72-php-mysqlnd
-yum install php72-php-gd
+
+#yum install php72-php-mysqlnd
+#yum install php72-php-gd
 
 systemctl restart php72-php-fpm
 
@@ -376,7 +377,9 @@ PRIMARY KEY (User),
 UNIQUE KEY User (User)
 ) ENGINE=InnoDB;
 
+INSERT INTO `ftpd` (`User`, `status`, `Password`, `Uid`, `Gid`, `Dir`, `ULBandwidth`, `DLBandwidth`, `comment`, `ipaccess`, `QuotaSize`, `QuotaFiles`) VALUES ('blog', '1', MD5('blog_passwd'), '1001', '1001', '/var/project/vovk.ml/', '100', '100', '', '*', '50', '0');
 
+	
 vim /etc/pure-ftpd/pure-ftpd.conf
 
 ChrootEveryone              yes
@@ -403,4 +406,3 @@ MySQLGetBandwidthUL SELECT ULBandwidth FROM ftpd WHERE User="\L"AND status="1" A
 MySQLGetBandwidthDL SELECT DLBandwidth FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
 MySQLGetQTASZ   SELECT QuotaSize FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
 MySQLGetQTAFS   SELECT QuotaFiles FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
-
