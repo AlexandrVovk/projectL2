@@ -1,0 +1,406 @@
+=======Centos7========
+SELinux
+======================
+
+sestatus && setenforce 0 && sestatus
+sed -i 's/SELINUX=enabled/SELINUX=disabled/' /etc/selinux/config
+sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
+
+yum -y update
+ln -sf /usr/share/zoneinfo/Europe/Kiev /etc/localtime
+yum install -y  ntpdate net-tools vim wget curl lynx
+ntpdate time.in.ua
+yum install -y epel-release yum-utils && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el7.repo
+#yum install -y epel-release && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el`rpm -q --qf "%{VERSION}" $(rpm -q --whatprovides redhat-release)`.repo
+yum install httpd -y
+systemctl enable  ntpdate && systemctl restart  ntpdate 
+systemctl enable  httpd && systemctl restart  httpd 
+sestatus && setenforce 0 && sestatus
+
+
+## ServerName localhost in /etc/httpd/conf/httpd.conf
+
+---httpd---
+
+
+
+
+mkdir -p /var/project/vovk.ml && cd /var/project/vovk.ml 
+
+
+
+echo "<html>
+  <head>
+    <title>Title message</title>
+  </head>
+<body>        <h1> Project domain vovk.ml. Centos7 server. Path /var/project </h1>
+</body>
+</html>" > index.html
+
+
+
+echo "<VirtualHost *:80>
+    ServerName vovk.ml
+    ServerAlias www.vovk.ml
+    DocumentRoot /var/project/vovk.ml
+    DirectoryIndex index.html index.php
+</VirtualHost>"  >> /etc/httpd/conf.d/vovk.ml.conf
+
+
+
+sed -i 's/#ServerName www.example.com:80/ServerName dokuwiki.tk/' /etc/httpd/conf/httpd.conf
+sed -i "s/DocumentRoot \"\/var\/www\/html\"/DocumentRoot \"\/var\/project\/\"/" /etc/httpd/conf/httpd.conf
+
+#vim /etc/httpd/conf/httpd.conf
+#ServerName dokuwiki.tk
+#DocumentRoot "/var/project/"
+
+vim /etc/httpd/conf/httpd.conf
+
+<Directory "/var/project">
+    Options Indexes FollowSymLinks
+    AllowOverride None
+    Require all granted
+</Directory>
+
+comment it
+#    ScriptAlias /cgi-bin/ "/var/www/cgi-bin/"
+
+
+apachectl -t && systemctl restart httpd
+
+
+firewall-cmd --get-default-zone
+firewall-cmd --zone=public --list-all
+firewall-cmd --permanent --zone=public --add-service=http && firewall-cmd --permanent --zone=public --add-service=https && firewall-cmd --zone=public --permanent --add-port=8080/tcp
+systemctl restart firewalld && firewall-cmd --zone=public --list-all
+
+
+----php7.1---
+yum install -y  yum-utils
+yum install -y epel-release
+rpm -Uvh http://rpms.remirepo.net/enterprise/remi-release-7.rpm
+yum-config-manager --enable remi-php71
+yum repolist all
+yum info php
+
+#yum install -y php php-mcrypt php-cli php-gd php-curl php-mysql php-ldap php-zip php-fileinfo
+
+yum -y install php php-opcache
+php -v
+
+mkdir -p /var/project/dokuwiki.tk && echo "<?php phpinfo(); ?>" > /var/project/dokuwiki.tk/phpinfo.php
+
+
+echo '<VirtualHost *:80>
+    ServerName dokuwiki.tk
+    ServerAlias www.dokuwiki.tk
+    DocumentRoot /var/project/dokuwiki.tk
+	DirectoryIndex index.php
+#<FilesMatch ".+\.ph(p[3457]?|t|tml)$">
+#    SetHandler application/x-httpd-php
+#</FilesMatch>
+        <Directory "/var/project/dokuwiki.tk">
+        Options +ExecCGI
+        </Directory>
+ScriptAlias /cgi-bin/ "/var/project/cgi-bin/"
+AddHandler application/x-httpd-php .php
+Action application/x-httpd-php /cgi-bin/php-cgi
+</VirtualHost>' > /etc/httpd/conf.d/dokuwiki.tk.conf
+
+mkdir /var/project/cgi-bin/ &&  cp /usr/bin/php-cgi /var/project/cgi-bin/php-cgi
+
+ 
+ mv /etc/httpd/conf.d/php.conf /etc/httpd/conf.d/php.conf.bkp
+ mv /etc/httpd/conf.modules.d/15-php.conf /etc/httpd/conf.modules.d/15-php.confff
+ 
+ 
+systemctl restart httpd
+
+
+ sed -i 's/memory_limit = 128M/memory_limit = 512M/' /etc/php.ini
+
+-----------
+https://www.howtoforge.com/tutorial/centos-lamp-server-apache-mysql-php/
+-----------
+
+---dokuwiki---
+mkdir -p /var/project/dokuwiki.tk && cd /var/project/dokuwiki.tk
+wget https://download.dokuwiki.org/src/dokuwiki/dokuwiki-stable.tgz
+tar -xzf dokuwiki-stable.tgz
+cp -R dokuwiki-*/* . && chmod -R 777 data/ && chmod -R 777 lib/ && chmod -R 777 conf/  && rm -rf dokuwiki-*
+
+apachectl -t && systemctl restart httpd
+---------------
+
+---basic-auth---user-dokuwiki---
+cd /var/project/dokuwiki.tk && htpasswd -c .htpasswd dokuwiki
+
+
+echo "AuthName \"Access denied. Please, enter login and password\"
+AuthType Basic
+AuthUserFile /var/project/dokuwiki.tk/.htpasswd
+Require valid-user"  > .htaccess
+
+
+vim /etc/httpd/conf/httpd.conf
+
+<Directory "/var/project/dokuwiki.tk">
+AllowOverride AuthConfig
+</Directory>
+
+apachectl -t && systemctl restart httpd
+
+https://www.golinuxhub.com/2018/04/how-to-set-up-password-authentication-htpasswd-htaccess-centos.html
+-----------------
+
+
+---server-status---
+vim /etc/httpd/conf/httpd.conf
+
+echo '<IfModule mod_status.c>
+    ExtendedStatus On
+    <Location /server-status>
+        SetHandler server-status
+        Order deny,allow
+        Allow from all
+    </Location>
+</IfModule>' >> /etc/httpd/conf/httpd.conf
+
+apachectl -t && systemctl restart httpd
+----------
+https://www.linode.com/community/questions/2/how-do-i-enable-the-server-status-page-in-apache
+----------
+
+port :8080
+
+sed -i 's/^Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
+sed -i 's/VirtualHost \*:80/VirtualHost \*:8080/' /etc/httpd/conf.d/*.conf
+
+apachectl -t && systemctl restart httpd
+
+---nginx---
+
+echo ' [nginx]
+name=nginx repo
+baseurl=http://nginx.org/packages/mainline/centos/$releasever/$basearch/
+gpgcheck=0
+enabled=1' > /etc/yum.repos.d/nginx.repo
+
+
+yum install -y nginx
+systemctl enable  nginx && systemctl restart  nginx
+
+
+echo 'server {
+   listen 80;
+   index index.php;
+   server_name dokuwiki.tk www.dokuwiki.tk;
+    gzip on;
+    gzip_min_length 1000;
+    gzip_buffers 4 32k;
+    gzip_proxied any;
+    gzip_types text/plain application/javascript application/x-javascript text/javascript text/xml text/css;
+    gzip_vary on;
+    gzip_disable "MSIE [1-6]\.(?!.*SV1)";
+
+
+  location / {
+            proxy_pass         http://localhost:8080;
+            proxy_redirect     off;
+            proxy_set_header   Host             $host;
+            proxy_set_header   X-Real-IP        $remote_addr;
+proxy_set_header X-Forwarded-Host $host;
+proxy_set_header X-Forwarded-Server $host;
+proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+proxy_set_header X-Forwarded-Proto $scheme;
+proxy_set_header X-Server-Address  $server_addr;
+            client_max_body_size       200m;
+            client_body_buffer_size    512k;
+            proxy_connect_timeout      600;
+            proxy_send_timeout         600;
+            proxy_read_timeout         600;
+            proxy_buffer_size          4k;
+            proxy_buffers              4 32k;
+            proxy_busy_buffers_size    64k;
+            proxy_temp_file_write_size 64k;
+}
+}' > /etc/nginx/conf.d/dokuwiki.tk.conf
+
+nginx -t && systemctl restart nginx
+
+---remoteip--
+
+echo '<IfModule remoteip_module>
+RemoteIPHeader X-Forwarded-For
+RemoteIPInternalProxy 127.0.0.1/8
+</IfModule> ' > /etc/httpd/conf.modules.d/00-remoteip.conf
+
+nginx -t && systemctl restart nginx
+apachectl -t && systemctl restart httpd
+
+---gzip---
+
+check 
+
+curl -IL -u dokuwiki:dokuwiki -H "Accept-Encoding: gzip, deflate" dokuwiki.tk
+
+
+---php-fpm---
+
+yum install php72-php-fpm
+
+groupadd -g 2000 blog
+useradd -u 2000 -s /bin/false -d /dev/null -g blog blog
+
+#useradd -d /dev/null0 -s /sbin/nologin blog
+
+echo '[vovk.ml]
+user = blog
+group = blog
+listen = /var/run/php72-fpm-vovk.ml.sock
+listen.allowed_clients = 127.0.0.1
+listen.owner = blog
+listen.group = nginx
+listen.mode = 0660
+pm = dynamic
+pm.max_children = 50
+pm.start_servers = 5
+pm.min_spare_servers = 5
+pm.max_spare_servers = 35
+slowlog = /var/opt/remi/php72/log/php-fpm/www-slow.log
+php_admin_value[error_log] = /var/opt/remi/php72/log/php-fpm/www-error.log
+php_admin_flag[log_errors] = on
+php_value[session.save_handler] = files
+php_value[session.save_path]    = /var/opt/remi/php72/lib/php/session
+php_value[soap.wsdl_cache_dir]  = /var/opt/remi/php72/lib/php/wsdlcache' > /etc/opt/remi/php72/php-fpm.d/vovk.ml.conf
+
+systemctl enable php72-php-fpm && systemctl start php72-php-fpm
+
+
+echo 'server {
+   listen 80;
+   index index.php;
+   server_name vovk.ml www.vovk.ml;
+   root /var/project/vovk.ml;
+
+location / {
+        try_files $uri $uri/ =404;
+    }
+
+  location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_pass        unix:/var/run/php72-fpm-vovk.ml.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+}
+
+        location /nginx_status {
+        stub_status on;
+}
+}' > /etc/nginx/conf.d/vovk.ml.conf
+
+nginx -t && systemctl restart nginx
+
+
+
+---wordpress---
+
+ cd /var/project/
+ wget https://wordpress.org/wordpress-5.0.3.tar.gz
+tar -xzf wordpress-5.0.3.tar.gz
+cp -Rdp wordpress/* vovk.ml/
+
+
+---mysql---
+
+ wget http://repo.mysql.com/mysql-community-release-el7-5.noarch.rpm
+ rpm -ivh mysql-community-release-el7-5.noarch.rpm
+
+yum update
+yum install mysql-server
+
+systemctl start mysqld && systemctl enable mysqld
+
+mysql_secure_installation
+
+mysql -uroot -p
+
+create database ftp_db;
+grant all on ftp_db .* to 'ftp_usr'@'localhost' identified by 'ftp_passwd';
+flush privileges;
+
+create database wordpress_db;
+grant all on wordpress_db .* to 'wordpress_usr'@'localhost' identified by 'wordpress_passwd';
+flush privileges;
+
+systemctl restart mysql
+
+cd /var/project/vovk.ml/ && cp wp-config-sample.php wp-config.php
+
+vim wp-config.php
+
+yum install php72-php-mysqlnd
+yum install php72-php-gd
+
+systemctl restart php72-php-fpm
+
+vim /etc/my.cnf
+bind-address = 127.0.0.1
+
+systemctl restart mysql
+
+---ftp---
+yum install pure-ftpd
+
+create database ftp_db;
+GRANT ALL ON ftp_db.* TO 'ftp_usr'@'localhost' IDENTIFIED BY 'ftp_passwd';
+FLUSH PRIVILEGES;
+use ftp_db;
+
+CREATE TABLE ftpd (
+User varchar(16) NOT NULL default '',
+status enum('0','1') NOT NULL default '0',
+Password varchar(64) NOT NULL default '',
+Uid varchar(11) NOT NULL default '-1',
+Gid varchar(11) NOT NULL default '-1',
+Dir varchar(128) NOT NULL default '',
+ULBandwidth smallint(5) NOT NULL default '0',
+DLBandwidth smallint(5) NOT NULL default '0',
+comment tinytext NOT NULL,
+ipaccess varchar(15) NOT NULL default '*',
+QuotaSize smallint(5) NOT NULL default '0',
+QuotaFiles int(11) NOT NULL default 0,
+PRIMARY KEY (User),
+UNIQUE KEY User (User)
+) ENGINE=InnoDB;
+
+
+vim /etc/pure-ftpd/pure-ftpd.conf
+
+ChrootEveryone              yes
+MySQLConfigFile               /etc/pure-ftpd/pureftpd-mysql.conf
+CreateHomeDir               yes
+
+cp  /etc/pure-ftpd/pureftpd-mysql.conf  /etc/pure-ftpd/pureftpd-mysql.conf-bkp
+
+vim /etc/pure-ftpd/pureftpd-mysql.conf
+
+MYSQLSocket      /var/lib/mysql/mysql.sock
+MYSQLServer     localhost
+MYSQLPort       3306
+MYSQLUser       [сюда_вписать_имя_юзера_mysql]
+MYSQLPassword   [сюда_вписать_пароль_юзера_mysql]
+MYSQLDatabase   [сюда_вписать_имя_базы_mysql]
+#MYSQLCrypt md5, cleartext, crypt() or password() - md5 is VERY RECOMMENDABLE uppon cleartext
+MYSQLCrypt      md5
+MYSQLGetPW      SELECT Password FROM ftpd WHERE User="\L" AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MYSQLGetUID     SELECT Uid FROM ftpd WHERE User="\L" AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MYSQLGetGID     SELECT Gid FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MYSQLGetDir     SELECT Dir FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MySQLGetBandwidthUL SELECT ULBandwidth FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MySQLGetBandwidthDL SELECT DLBandwidth FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MySQLGetQTASZ   SELECT QuotaSize FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MySQLGetQTAFS   SELECT QuotaFiles FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+
