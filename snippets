@@ -8,7 +8,7 @@ sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
 
 #yum -y update
 ln -sf /usr/share/zoneinfo/Europe/Kiev /etc/localtime
-yum install -y  ntpdate net-tools vim wget curl lynx htop
+yum install -y  ntpdate net-tools vim wget curl lynx htop telnet bind-utils
 ntpdate time.in.ua
 yum install -y epel-release yum-utils && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el7.repo
 #yum install -y epel-release && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el`rpm -q --qf "%{VERSION}" $(rpm -q --whatprovides redhat-release)`.repo
@@ -25,7 +25,7 @@ sestatus && setenforce 0 && sestatus
 
 
 
-mkdir -p /var/project/vovk.ml && cd /var/project/vovk.ml 
+mkdir -p /var/project/vovk.cf && cd /var/project/vovk.cf 
 
 
 
@@ -33,22 +33,22 @@ echo "<html>
   <head>
     <title>Title message</title>
   </head>
-<body>        <h1> Project domain vovk.ml. Centos7 server. Path /var/project </h1>
+<body>        <h1> Project domain vovk.cf. Centos7 server. Path /var/project </h1>
 </body>
 </html>" > index.html
 
 
 
 echo "<VirtualHost *:80>
-    ServerName vovk.ml
-    ServerAlias www.vovk.ml
-    DocumentRoot /var/project/vovk.ml
+    ServerName vovk.cf
+    ServerAlias www.vovk.cf
+    DocumentRoot /var/project/vovk.cf
     DirectoryIndex index.html index.php
-</VirtualHost>"  >> /etc/httpd/conf.d/vovk.ml.conf
+</VirtualHost>"  >> /etc/httpd/conf.d/vovk.cf.conf
 
 
 
-sed -i 's/#ServerName www.example.com:80/ServerName vovk.ml/' /etc/httpd/conf/httpd.conf
+sed -i 's/#ServerName www.example.com:80/ServerName vovk.cf/' /etc/httpd/conf/httpd.conf
 sed -i "s/DocumentRoot \"\/var\/www\/html\"/DocumentRoot \"\/var\/project\/\"/" /etc/httpd/conf/httpd.conf
 
 #vim /etc/httpd/conf/httpd.conf
@@ -93,19 +93,32 @@ mkdir -p /var/project/dokuwiki.tk && echo "<?php phpinfo(); ?>" > /var/project/d
 
 
 echo '<VirtualHost *:80>
-    ServerName dokuwiki.tk
-    ServerAlias www.dokuwiki.tk
-    DocumentRoot /var/project/dokuwiki.tk
-	DirectoryIndex index.php
-#<FilesMatch ".+\.ph(p[3457]?|t|tml)$">
-#    SetHandler application/x-httpd-php
-#</FilesMatch>
-        <Directory "/var/project/dokuwiki.tk">
+ServerName dokuwiki.tk
+ServerAlias www.dokuwiki.tk
+DocumentRoot /var/project/dokuwiki.tk
+DirectoryIndex index.php
+
+<Directory "/var/project/dokuwiki.tk">
         Options +ExecCGI
-        </Directory>
+</Directory>
+
 ScriptAlias /cgi-bin/ "/var/project/cgi-bin/"
 AddHandler application/x-httpd-php .php
 Action application/x-httpd-php /cgi-bin/php-cgi
+
+<Location /server-status>
+        SetHandler server-status
+        Order deny,allow
+        Allow from all
+        Satisfy any
+</Location>
+
+<Location />
+AuthName "Access denied. Please, enter login and password"
+AuthType Basic
+AuthUserFile /var/project/dokuwiki.tk/.htpasswd
+Require valid-user
+</Location>
 </VirtualHost>' > /etc/httpd/conf.d/dokuwiki.tk.conf
 
 mkdir /var/project/cgi-bin/ &&  cp /usr/bin/php-cgi /var/project/cgi-bin/php-cgi
@@ -118,7 +131,7 @@ mkdir /var/project/cgi-bin/ &&  cp /usr/bin/php-cgi /var/project/cgi-bin/php-cgi
 systemctl restart httpd
 
 
- sed -i 's/memory_limit = 128M/memory_limit = 512M/' /etc/php.ini
+sed -i 's/memory_limit = 128M/memory_limit = 512M/' /etc/php.ini
 
 -----------
 https://www.howtoforge.com/tutorial/centos-lamp-server-apache-mysql-php/
@@ -145,10 +158,10 @@ Require valid-user"  > .htaccess
 
 #vim /etc/httpd/conf/httpd.conf
 
-echo '
-<Directory "/var/project/dokuwiki.tk">
-AllowOverride AuthConfig
-</Directory>' >> /etc/httpd/conf/httpd.conf
+#echo '
+#<Directory "/var/project/dokuwiki.tk">
+#AllowOverride AuthConfig
+#</Directory>' >> /etc/httpd/conf/httpd.conf
 
 apachectl -t && systemctl restart httpd
 
@@ -157,7 +170,6 @@ https://www.golinuxhub.com/2018/04/how-to-set-up-password-authentication-htpassw
 
 
 ---server-status---
-#vim /etc/httpd/conf/httpd.conf
 
 echo '<IfModule mod_status.c>
     ExtendedStatus On
@@ -172,6 +184,18 @@ apachectl -t && systemctl restart httpd
 ----------
 https://www.linode.com/community/questions/2/how-do-i-enable-the-server-status-page-in-apache
 ----------
+
+dokuwiki.tk/install.php
+
+mv  /var/project/dokuwiki.tk/install.php /var/project/dokuwiki.tk/install.phppp
+
+----- change passwd -----
+vim conf/users.auth.php
+
+------ disable registration -----
+disableactions 
+
+
 
 port :8080
 
@@ -205,10 +229,19 @@ echo 'server {
     gzip_vary on;
     gzip_disable "MSIE [1-6]\.(?!.*SV1)";
 
+        location /server-status {
+        auth_basic "Please  , Enter Password:";
+        auth_basic_user_file /var/project/dokuwiki.tk/.server-status-htpasswd;
+        proxy_pass         http://localhost:8080;
+        include /etc/nginx/proxy_pass.conf;
+}
+        location / {
+        proxy_pass         http://localhost:8080;
+        include /etc/nginx/proxy_pass.conf;
+}
+}' > /etc/nginx/conf.d/dokuwiki.tk.conf
 
-  location / {
-            proxy_pass         http://localhost:8080;
-            proxy_redirect     off;
+echo '      proxy_redirect     off;
             proxy_set_header   Host             $host;
             proxy_set_header   X-Real-IP        $remote_addr;
 proxy_set_header X-Forwarded-Host $host;
@@ -225,8 +258,11 @@ proxy_set_header X-Server-Address  $server_addr;
             proxy_buffers              4 32k;
             proxy_busy_buffers_size    64k;
             proxy_temp_file_write_size 64k;
-}
-}' > /etc/nginx/conf.d/dokuwiki.tk.conf
+ ' > /etc/nginx/proxy_pass.conf
+
+
+htpasswd -c /var/project/dokuwiki.tk/.server-status-htpasswd status
+
 
 nginx -t && systemctl restart nginx
 
@@ -242,8 +278,6 @@ apachectl -t && systemctl restart httpd
 
 ---gzip---
 
-check 
-
 curl -IL -u dokuwiki:dokuwiki -H "Accept-Encoding: gzip, deflate" dokuwiki.tk
 
 
@@ -255,10 +289,10 @@ groupadd -g 2000 blog && useradd -u 2000 -s /bin/false -d /dev/null -g blog blog
 
 #useradd -d /dev/null0 -s /sbin/nologin blog
 
-echo '[vovk.ml]
+echo '[vovk.cf]
 user = blog
 group = blog
-listen = /var/run/php72-fpm-vovk.ml.sock
+listen = /var/run/php72-fpm-vovk.cf.sock
 listen.allowed_clients = 127.0.0.1
 listen.owner = blog
 listen.group = nginx
@@ -273,7 +307,29 @@ php_admin_value[error_log] = /var/opt/remi/php72/log/php-fpm/www-error.log
 php_admin_flag[log_errors] = on
 php_value[session.save_handler] = files
 php_value[session.save_path]    = /var/opt/remi/php72/lib/php/session
-php_value[soap.wsdl_cache_dir]  = /var/opt/remi/php72/lib/php/wsdlcache' > /etc/opt/remi/php72/php-fpm.d/vovk.ml.conf
+php_value[soap.wsdl_cache_dir]  = /var/opt/remi/php72/lib/php/wsdlcache' > /etc/opt/remi/php72/php-fpm.d/vovk.cf.conf
+
+
+echo '[admin.vovk.cf]
+user = nginx
+group = nginx
+listen.owner = nginx
+listen.group = nginx
+listen = /var/run/php72-fpm-admin.vovk.cf.sock
+listen.allowed_clients = 127.0.0.1
+pm = dynamic
+pm.max_children = 50
+pm.start_servers = 5
+pm.min_spare_servers = 5
+pm.max_spare_servers = 35
+slowlog = /var/opt/remi/php72/log/php-fpm/www-slow.log
+php_admin_value[error_log] = /var/opt/remi/php72/log/php-fpm/www-error.log
+php_admin_flag[log_errors] = on
+php_value[session.save_handler] = files
+php_value[session.save_path]    = /var/opt/remi/php72/lib/php/session
+php_value[soap.wsdl_cache_dir]  = /var/opt/remi/php72/lib/php/wsdlcache' > /etc/opt/remi/php72/php-fpm.d/admin.vovk.cf.conf
+
+
 
 systemctl enable php72-php-fpm && systemctl start php72-php-fpm
 
@@ -281,16 +337,24 @@ systemctl enable php72-php-fpm && systemctl start php72-php-fpm
 echo 'server {
    listen 80;
    index index.php;
-   server_name vovk.ml www.vovk.ml;
-   root /var/project/vovk.ml;
+   server_name vovk.cf www.vovk.cf;
+   root /var/project/vovk.cf;
 
 location / {
         try_files $uri $uri/ =404;
     }
+location /wp-admin {
+        auth_basic "Please, enter your login and password.";
+        auth_basic_user_file /var/project/vovk.cf/.htpasswd;
+}
+location ~ /wp-login.php {
+        auth_basic "Please, enter your login and password.";
+        auth_basic_user_file /var/project/vovk.cf/.htpasswd;
+}
 
   location ~ \.php$ {
         try_files $uri =404;
-        fastcgi_pass        unix:/var/run/php72-fpm-vovk.ml.sock;
+        fastcgi_pass        unix:/var/run/php72-fpm-vovk.cf.sock;
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
@@ -299,7 +363,9 @@ location / {
         location /nginx_status {
         stub_status on;
 }
-}' > /etc/nginx/conf.d/vovk.ml.conf
+}' > /etc/nginx/conf.d/vovk.cf.conf
+
+htpasswd -c /var/project/vovk.cf/.htpasswd admin
 
 nginx -t && systemctl restart nginx
 
@@ -310,8 +376,9 @@ nginx -t && systemctl restart nginx
  cd /var/project/
  wget https://wordpress.org/wordpress-5.0.3.tar.gz
 tar -xzf wordpress-5.0.3.tar.gz
-cp -Rdp wordpress/* vovk.ml/
-
+mkdir /var/project/vovk.cf
+cp -Rdp wordpress/* vovk.cf/
+chown -R blog:nginx /var/project/vovk.cf
 
 ---mysql---
 
@@ -337,7 +404,7 @@ flush privileges;
 
 systemctl restart mysql
 
-cd /var/project/vovk.ml/ && cp wp-config-sample.php wp-config.php
+cd /var/project/vovk.cf/ && cp wp-config-sample.php wp-config.php
 
 sed -i "s/database_name_here/wordpress_db/;s/username_here/wordpress_usr/;s/password_here/wordpress_passwd/" wp-config.php
 
@@ -351,6 +418,53 @@ vim /etc/my.cnf
 bind-address = 127.0.0.1
 
 systemctl restart mysql
+
+
+PHPmyadmin
+--------------
+yum install php72-php-mbstring php72-php-xmlrpc php72-php-soap php72-php-gd php72-php-xml php72-php-intl php72-php-mysql php72-php-cli php72-php-zip php72-php-curl
+
+mkdir /var/project/admin.vovk.cf && cd /var/project/admin.vovk.cf
+
+wget https://files.phpmyadmin.net/phpMyAdmin/4.9.0.1/phpMyAdmin-4.9.0.1-all-languages.zip
+
+unzip phpMyAdmin-4.9.0.1-all-languages.zip
+
+cd phpMyAdmin-4.9.0.1-all-languages && mv * ../ && mv .* ../
+
+chmod 777 /var/opt/remi/php72/lib/php/session
+
+vim /var/project/admin.vovk.cf/config.inc.php
+$cfg['blowfish_secret'] = '$2a$07$SkoryOo8DGhzlQ3sRILLguoNhtO4QDiJjNH/sNB3SWr7jpN9g7UcG';
+
+echo 'server {
+   listen 80;
+   index index.php;
+   server_name admin.vovk.cf www.admin.vovk.cf;
+   root /var/project/admin.vovk.cf;
+   auth_basic "Please, enter your login and password.";
+   auth_basic_user_file /var/project/admin.vovk.cf/.htpasswd;
+
+
+location / {
+        try_files $uri $uri/ =404;
+    }
+
+  location ~ \.php$ {
+        try_files $uri =404;
+        fastcgi_pass        unix:/var/run/php72-fpm-admin.vovk.cf.sock;
+        fastcgi_index index.php;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        include fastcgi_params;
+}
+}' > /etc/nginx/conf.d/admin.vovk.cf.conf
+
+htpasswd -c /var/project/admin.vovk.cf/.htpasswd phpmyadmin
+
+systemctl restart nginx
+systemctl restart php72-php-fpm
+
+
 
 ---ftp---
 yum install pure-ftpd
@@ -377,7 +491,7 @@ PRIMARY KEY (User),
 UNIQUE KEY User (User)
 ) ENGINE=InnoDB;
 
-INSERT INTO `ftpd` (`User`, `status`, `Password`, `Uid`, `Gid`, `Dir`, `ULBandwidth`, `DLBandwidth`, `comment`, `ipaccess`, `QuotaSize`, `QuotaFiles`) VALUES ('blog', '1', MD5('blog_passwd'), '1001', '1001', '/var/project/vovk.ml/', '100', '100', '', '*', '50', '0');
+INSERT INTO `ftpd` (`User`, `status`, `Password`, `Uid`, `Gid`, `Dir`, `ULBandwidth`, `DLBandwidth`, `comment`, `ipaccess`, `QuotaSize`, `QuotaFiles`) VALUES ('blog', '1', MD5('blog_passwd'), '1001', '1001', '/var/project/vovk.cf/', '100', '100', '', '*', '50', '0');
 
 	
 vim /etc/pure-ftpd/pure-ftpd.conf
@@ -407,3 +521,343 @@ MySQLGetBandwidthDL SELECT DLBandwidth FROM ftpd WHERE User="\L"AND status="1" A
 MySQLGetQTASZ   SELECT QuotaSize FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
 MySQLGetQTAFS   SELECT QuotaFiles FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
 
+
+
+MUNIN
+-----------
+
+https://www.webfoobar.com/index.php/node/48
+
+yum install munin munin-node
+
+systemctl enable munin-node && systemctl start munin-node
+
+echo 'graph_strategy cgi
+html_strategy cgi' > /etc/munin/conf.d/00-munincustom.conf
+
+yum install spawn-fcgi fcgi-devel autoconf automake gcc
+
+cd /usr/src/
+wget http://github.com/gnosek/fcgiwrap/tarball/master -O fcgiwrap.tar.gz
+tar zxvf fcgiwrap.tar.gz
+rm -rf fcgiwrap.tar.gz
+cd gnosek-fcgiwrap-*
+autoreconf -i
+./configure
+make
+make install
+
+
+
+echo '#!/bin/sh
+#
+# spawn-fcgi-munin-html   Start and stop FastCGI Munin HTML processes
+#
+# chkconfig:   - 80 20
+# description: Spawn FastCGI scripts to be used by web servers
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $local_fs $network $syslog $remote_fs $named
+# Required-Stop:
+# Should-Start:
+# Should-Stop:
+# Default-Start:
+# Default-Stop: 0 1 2 3 4 5 6
+# Short-Description: Start and stop FastCGI processes
+# Description:       Spawn FastCGI scripts to be used by web servers
+### END INIT INFO
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+exec="/usr/bin/spawn-fcgi"
+prog="spawn-fcgi-munin-html"
+config="/etc/sysconfig/spawn-fcgi-munin-html"
+
+[ -e /etc/sysconfig/$prog ] && . /etc/sysconfig/$prog
+
+lockfile=/var/lock/subsys/$prog
+
+start() {
+    [ -x $exec ] || exit 5
+    [ -f $config ] || exit 6
+    echo -n $"Starting $prog: "
+    # Just in case this is left over with wrong ownership
+    [ -n "${FCGI_SOCKET}" -a -S "${FCGI_SOCKET}" ] && rm -f ${FCGI_SOCKET}
+    daemon "$exec $OPTIONS >/dev/null"
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && touch $lockfile
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    killproc -p $PID_FILE
+    # Remove the socket in order to never leave it with wrong ownership
+    [ -n "${FCGI_SOCKET}" -a -S "${FCGI_SOCKET}" ] && rm -f ${FCGI_SOCKET}
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f $lockfile
+    return $retval
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    restart
+}
+
+force_reload() {
+    restart
+}
+
+rh_status() {
+    # run checks to determine if the service is running or use generic status
+    status $prog
+}
+
+rh_status_q() {
+    rh_status &>/dev/null
+}
+
+
+case "$1" in
+    start)
+        #rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        #rh_status_q || exit 0
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    reload)
+        #rh_status_q || exit 7
+        $1
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        rh_status
+        ;;
+    condrestart|try-restart)
+        rh_status_q || exit 0
+        restart
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
+        exit 2
+esac
+exit $?' > /etc/init.d/spawn-fcgi-munin-html
+
+
+chmod +x /etc/init.d/spawn-fcgi-munin-html
+chkconfig --levels 235 spawn-fcgi-munin-html on
+
+
+echo '# You must set some working options before the "spawn-fcgi" service will work.
+# If SOCKET points to a file, then this file is cleaned up by the init script.
+#
+# See spawn-fcgi(1) for all possible options.
+NAME=fcgi-munin-html
+PID_FILE=/run/munin/$NAME.pid
+FCGI_SOCKET=/run/munin/$NAME.sock
+FCGI_PROGRAM=/usr/local/sbin/fcgiwrap
+FCGI_USER=nginx
+FCGI_GROUP=munin
+FCGI_WORKERS=1
+FCGI_EXTRA_OPTIONS="-M 0700"
+OPTIONS="-u $FCGI_USER -g $FCGI_GROUP -s $FCGI_SOCKET -S $FCGI_EXTRA_OPTIONS -F $FCGI_WORKERS -P $PID_FILE -- $FCGI_PROGRAM"' > /etc/sysconfig/spawn-fcgi-munin-html
+
+
+service spawn-fcgi-munin-html start
+
+
+echo '#!/bin/sh
+#
+# spawn-fcgi-munin-graph   Start and stop FastCGI Munin graph processes
+#
+# chkconfig:   - 80 20
+# description: Spawn FastCGI scripts to be used by web servers
+
+### BEGIN INIT INFO
+# Provides:
+# Required-Start: $local_fs $network $syslog $remote_fs $named
+# Required-Stop:
+# Should-Start:
+# Should-Stop:
+# Default-Start:
+# Default-Stop: 0 1 2 3 4 5 6
+# Short-Description: Start and stop FastCGI processes
+# Description:       Spawn FastCGI scripts to be used by web servers
+### END INIT INFO
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+exec="/usr/bin/spawn-fcgi"
+prog="spawn-fcgi-munin-graph"
+config="/etc/sysconfig/spawn-fcgi-munin-graph"
+
+[ -e /etc/sysconfig/$prog ] && . /etc/sysconfig/$prog
+
+lockfile=/var/lock/subsys/$prog
+
+start() {
+    [ -x $exec ] || exit 5
+    [ -f $config ] || exit 6
+    echo -n $"Starting $prog: "
+    # Just in case this is left over with wrong ownership
+    [ -n "${FCGI_SOCKET}" -a -S "${FCGI_SOCKET}" ] && rm -f ${FCGI_SOCKET}
+    daemon "$exec $OPTIONS >/dev/null"
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && touch $lockfile
+    return $retval
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    killproc -p $PID_FILE
+    # Remove the socket in order to never leave it with wrong ownership
+    [ -n "${FCGI_SOCKET}" -a -S "${FCGI_SOCKET}" ] && rm -f ${FCGI_SOCKET}
+    retval=$?
+    echo
+    [ $retval -eq 0 ] && rm -f $lockfile
+    return $retval
+}
+
+restart() {
+    stop
+    start
+}
+
+reload() {
+    restart
+}
+
+force_reload() {
+    restart
+}
+
+rh_status() {
+    # run checks to determine if the service is running or use generic status
+    status $prog
+}
+
+rh_status_q() {
+    rh_status &>/dev/null
+}
+
+
+case "$1" in
+    start)
+        #rh_status_q && exit 0
+        $1
+        ;;
+    stop)
+        #rh_status_q || exit 0
+        $1
+        ;;
+    restart)
+        $1
+        ;;
+    reload)
+        #rh_status_q || exit 7
+        $1
+        ;;
+    force-reload)
+        force_reload
+        ;;
+    status)
+        rh_status
+        ;;
+    condrestart|try-restart)
+        rh_status_q || exit 0
+        restart
+        ;;
+    *)
+        echo $"Usage: $0 {start|stop|status|restart|condrestart|try-restart|reload|force-reload}"
+        exit 2
+esac
+exit $?' > /etc/init.d/spawn-fcgi-munin-graph
+
+
+chmod +x /etc/init.d/spawn-fcgi-munin-graph
+chkconfig --levels 235 spawn-fcgi-munin-graph on
+
+
+
+echo '# You must set some working options before the "spawn-fcgi" service will work.
+# If SOCKET points to a file, then this file is cleaned up by the init script.
+#
+# See spawn-fcgi(1) for all possible options.
+NAME=fcgi-munin-graph
+PID_FILE=/run/munin/$NAME.pid
+FCGI_SOCKET=/run/munin/$NAME.sock
+FCGI_PROGRAM=/usr/local/sbin/fcgiwrap
+FCGI_USER=nginx
+FCGI_GROUP=munin
+FCGI_WORKERS=2
+FCGI_EXTRA_OPTIONS="-M 0700"
+OPTIONS="-u $FCGI_USER -g $FCGI_GROUP -s $FCGI_SOCKET -S $FCGI_EXTRA_OPTIONS -F $FCGI_WORKERS -P $PID_FILE -- $FCGI_PROGRAM"' > /etc/sysconfig/spawn-fcgi-munin-graph
+
+
+service spawn-fcgi-munin-graph start
+
+
+
+echo 'server {
+        listen 80;
+        server_name  munin.vovk.cf;
+
+        access_log /var/log/nginx/munin.vovk.cf_access.log        combined;
+        error_log /var/log/nginx/munin.vovk.cf_error.log;
+
+        auth_basic "Please, enter your login and password.";
+        auth_basic_user_file /var/www/html/munin/.htpasswd;
+
+        root  /var/www/html/munin;
+        index   index.html;
+
+  location / {
+    fastcgi_split_path_info ^(/)(.*);
+    fastcgi_param PATH_INFO $fastcgi_path_info;
+    fastcgi_param SCRIPT_FILENAME /var/www/html/munin/cgi/munin-cgi-html;
+    include fastcgi_params;
+    fastcgi_pass unix:/var/run/munin/fcgi-munin-html.sock;
+
+
+    location /static/ {
+      alias /etc/munin/static/;
+      expires 30d;
+}
+
+    location ^~ /munin-cgi/munin-cgi-graph/ {
+      access_log off;
+      fastcgi_split_path_info ^(/munin-cgi/munin-cgi-graph)(.*);
+      fastcgi_param PATH_INFO $fastcgi_path_info;
+      fastcgi_param SCRIPT_FILENAME /var/www/html/munin/cgi/munin-cgi-graph;
+      include fastcgi_params;
+      fastcgi_pass unix:/var/run/munin/fcgi-munin-graph.sock;
+
+      # Bypass cache.
+      fastcgi_cache_bypass 0;
+      fastcgi_no_cache 0;
+      expires epoch;
+    }
+}
+} ' > /etc/nginx/conf.d/munin.vovk.cf.conf
+
+
+htpasswd -c /var/www/html/munin/.htpasswd admin
+
+systemctl restart munin-node nginx
