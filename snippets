@@ -8,8 +8,8 @@ sed -i 's/SELINUX=enforcing/SELINUX=disabled/' /etc/selinux/config
 
 #yum -y update
 ln -sf /usr/share/zoneinfo/Europe/Kiev /etc/localtime
-yum install -y  ntpdate net-tools vim wget curl lynx htop telnet bind-utils
-ntpdate time.in.ua
+yum install -y  ntpdate net-tools vim wget curl lynx unzip telnet bind-utils ftp
+ntpdate time.in.ua 
 yum install -y epel-release yum-utils && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el7.repo
 #yum install -y epel-release && cd /etc/yum.repos.d && wget https://repo.codeit.guru/codeit.el`rpm -q --qf "%{VERSION}" $(rpm -q --whatprovides redhat-release)`.repo
 yum install httpd -y
@@ -55,24 +55,24 @@ sed -i "s/DocumentRoot \"\/var\/www\/html\"/DocumentRoot \"\/var\/project\/\"/" 
 #ServerName dokuwiki.tk
 #DocumentRoot "/var/project/"
 
-vim /etc/httpd/conf/httpd.conf
 
-<Directory "/var/project">
+
+echo '<Directory "/var/project">
     Options Indexes FollowSymLinks
     AllowOverride None
     Require all granted
-</Directory>
+</Directory>' >> /etc/httpd/conf/httpd.conf
 
-comment it
+vim /etc/httpd/conf/httpd.conf
 #    ScriptAlias /cgi-bin/ "/var/www/cgi-bin/"
 
 
-apachectl -t && systemctl restart httpd
+httpd -t && systemctl restart httpd
 
 
 firewall-cmd --get-default-zone
 firewall-cmd --zone=public --list-all
-firewall-cmd --permanent --zone=public --add-service=http && firewall-cmd --permanent --zone=public --add-service=https && firewall-cmd --zone=public --permanent --add-port=8080/tcp
+firewall-cmd --permanent --zone=public --add-service=http && firewall-cmd --permanent --zone=public --add-service=https && firewall-cmd --zone=public --permanent --add-port=8080/tcp && firewall-cmd --permanent --add-service=ftp
 systemctl restart firewalld && firewall-cmd --zone=public --list-all
 
 
@@ -86,7 +86,7 @@ yum info php
 
 #yum install -y php php-mcrypt php-cli php-gd php-curl php-mysql php-ldap php-zip php-fileinfo  php-xml
 
-yum -y install php php-opcache
+yum -y install php php-opcache php-xml
 php -v
 
 mkdir -p /var/project/dokuwiki.tk && echo "<?php phpinfo(); ?>" > /var/project/dokuwiki.tk/phpinfo.php
@@ -119,13 +119,18 @@ AuthType Basic
 AuthUserFile /var/project/dokuwiki.tk/.htpasswd
 Require valid-user
 </Location>
+<LocationMatch "/(data|conf|bin|inc|vendor)/">
+    Order allow,deny
+    Deny from all
+    Satisfy All
+</LocationMatch>
 </VirtualHost>' > /etc/httpd/conf.d/dokuwiki.tk.conf
 
 mkdir /var/project/cgi-bin/ &&  cp /usr/bin/php-cgi /var/project/cgi-bin/php-cgi
 
  
-# mv /etc/httpd/conf.d/php.conf /etc/httpd/conf.d/php.conf.bkp
-# mv /etc/httpd/conf.modules.d/15-php.conf /etc/httpd/conf.modules.d/15-php.confff
+mv /etc/httpd/conf.d/php.conf /etc/httpd/conf.d/php.conf.bkp
+mv /etc/httpd/conf.modules.d/15-php.conf /etc/httpd/conf.modules.d/15-php.confff
  
  
 systemctl restart httpd
@@ -143,7 +148,7 @@ wget https://download.dokuwiki.org/src/dokuwiki/dokuwiki-stable.tgz
 tar -xzf dokuwiki-stable.tgz
 cp -R dokuwiki-*/* . && chmod -R 777 data/ && chmod -R 777 lib/ && chmod -R 777 conf/  && rm -rf dokuwiki-*
 
-apachectl -t && systemctl restart httpd
+httpd -t && systemctl restart httpd
 ---------------
 
 ---basic-auth---user-dokuwiki---
@@ -163,7 +168,7 @@ Require valid-user"  > .htaccess
 #AllowOverride AuthConfig
 #</Directory>' >> /etc/httpd/conf/httpd.conf
 
-apachectl -t && systemctl restart httpd
+
 
 https://www.golinuxhub.com/2018/04/how-to-set-up-password-authentication-htpasswd-htaccess-centos.html
 -----------------
@@ -180,7 +185,7 @@ echo '<IfModule mod_status.c>
     </Location>
 </IfModule>' >> /etc/httpd/conf/httpd.conf
 
-apachectl -t && systemctl restart httpd
+httpd -t && systemctl restart httpd
 ----------
 https://www.linode.com/community/questions/2/how-do-i-enable-the-server-status-page-in-apache
 ----------
@@ -202,7 +207,7 @@ port :8080
 sed -i 's/^Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
 sed -i 's/VirtualHost \*:80/VirtualHost \*:8080/' /etc/httpd/conf.d/*.conf
 
-apachectl -t && systemctl restart httpd
+httpd -t && systemctl restart httpd
 
 ---nginx---
 
@@ -274,16 +279,16 @@ RemoteIPInternalProxy 127.0.0.1/8
 </IfModule> ' > /etc/httpd/conf.modules.d/00-remoteip.conf
 
 nginx -t && systemctl restart nginx
-apachectl -t && systemctl restart httpd
+httpd -t && systemctl restart httpd
 
 ---gzip---
 
-curl -IL -u dokuwiki:dokuwiki -H "Accept-Encoding: gzip, deflate" dokuwiki.tk
+curl -IL -H "Accept-Encoding: gzip, deflate" dokuwiki.tk
 
 
 ---php-fpm---
 
-yum install php72-php-fpm php72-php-mysqlnd php72-php-gd
+yum install -y php72-php-fpm php72-php-mysqlnd php72-php-gd 
 
 groupadd -g 2000 blog && useradd -u 2000 -s /bin/false -d /dev/null -g blog blog
 
@@ -341,16 +346,21 @@ echo 'server {
    root /var/project/vovk.cf;
 
 location / {
-        try_files $uri $uri/ =404;
+        try_files $uri $uri/ /index.php?$args;
     }
-location /wp-admin {
+        location ~ /wp-(admin/|login\.php) {
         auth_basic "Please, enter your login and password.";
         auth_basic_user_file /var/project/vovk.cf/.htpasswd;
-}
-location ~ /wp-login.php {
-        auth_basic "Please, enter your login and password.";
-        auth_basic_user_file /var/project/vovk.cf/.htpasswd;
-}
+                location ~ \.php$ {
+                fastcgi_pass        unix:/var/run/php72-fpm-vovk.cf.sock;
+                fastcgi_index index.php;
+                fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                include fastcgi_params;
+                add_header X-script-name "$fastcgi_script_name" always;
+                add_header X-root "$document_root" always;
+                add_header X-script-filename "$document_root$fastcgi_script_name" always;
+                }
+        }
 
   location ~ \.php$ {
         try_files $uri =404;
@@ -358,12 +368,11 @@ location ~ /wp-login.php {
         fastcgi_index index.php;
         fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
         include fastcgi_params;
-}
 
-        location /nginx_status {
-        stub_status on;
+        }
+
 }
-}' > /etc/nginx/conf.d/vovk.cf.conf
+' > /etc/nginx/conf.d/vovk.cf.conf
 
 htpasswd -c /var/project/vovk.cf/.htpasswd admin
 
@@ -373,8 +382,8 @@ nginx -t && systemctl restart nginx
 
 ---wordpress---
 
- cd /var/project/
- wget https://wordpress.org/wordpress-5.0.3.tar.gz
+cd /var/project/
+wget https://wordpress.org/wordpress-5.0.3.tar.gz
 tar -xzf wordpress-5.0.3.tar.gz
 mkdir /var/project/vovk.cf
 cp -Rdp wordpress/* vovk.cf/
@@ -382,15 +391,20 @@ chown -R blog:nginx /var/project/vovk.cf
 
 ---mysql---
 
- wget http://repo.mysql.com/mysql-community-release-el7-5.noarch.rpm
- rpm -ivh mysql-community-release-el7-5.noarch.rpm
+wget http://repo.mysql.com/mysql-community-release-el7-5.noarch.rpm
+rpm -ivh mysql-community-release-el7-5.noarch.rpm
 
 #yum update
-yum install mysql-server -y
+yum install mysql-server -y  
 
 systemctl start mysqld && systemctl enable mysqld 
 
 mysql_secure_installation
+
+vim /etc/my.cnf
+bind-address=127.0.0.1
+
+systemctl restart mysql && netstat -tunlp | grep mysql
 
 mysql -uroot -p
 
@@ -412,17 +426,13 @@ sed -i "s/database_name_here/wordpress_db/;s/username_here/wordpress_usr/;s/pass
 #yum install php72-php-mysqlnd
 #yum install php72-php-gd
 
-systemctl restart php72-php-fpm
+systemctl restart php72-php-fpm nginx
 
-vim /etc/my.cnf
-bind-address = 127.0.0.1
-
-systemctl restart mysql
 
 
 PHPmyadmin
 --------------
-yum install php72-php-mbstring php72-php-xmlrpc php72-php-soap php72-php-gd php72-php-xml php72-php-intl php72-php-mysql php72-php-cli php72-php-zip php72-php-curl
+yum install php72-php-mbstring php72-php-xmlrpc php72-php-soap php72-php-mysqlnd php72-php-gd php72-php-xml php72-php-intl php72-php-mysql php72-php-cli php72-php-zip php72-php-curl
 
 mkdir /var/project/admin.vovk.cf && cd /var/project/admin.vovk.cf
 
@@ -433,6 +443,8 @@ unzip phpMyAdmin-4.9.0.1-all-languages.zip
 cd phpMyAdmin-4.9.0.1-all-languages && mv * ../ && mv .* ../
 
 chmod 777 /var/opt/remi/php72/lib/php/session
+
+cd ..  && cp config.sample.inc.php config.inc.php
 
 vim /var/project/admin.vovk.cf/config.inc.php
 $cfg['blowfish_secret'] = '$2a$07$SkoryOo8DGhzlQ3sRILLguoNhtO4QDiJjNH/sNB3SWr7jpN9g7UcG';
@@ -461,17 +473,18 @@ location / {
 
 htpasswd -c /var/project/admin.vovk.cf/.htpasswd phpmyadmin
 
-systemctl restart nginx
-systemctl restart php72-php-fpm
+chown -R nginx:nginx /var/project/admin.vovk.cf
+
+systemctl restart nginx php72-php-fpm
+
 
 
 
 ---ftp---
-yum install pure-ftpd
+yum install -y pure-ftpd
 
-create database ftp_db;
-GRANT ALL ON ftp_db.* TO 'ftp_usr'@'localhost' IDENTIFIED BY 'ftp_passwd';
-FLUSH PRIVILEGES;
+mysql -uroot -p
+
 use ftp_db;
 
 CREATE TABLE ftpd (
@@ -491,7 +504,7 @@ PRIMARY KEY (User),
 UNIQUE KEY User (User)
 ) ENGINE=InnoDB;
 
-INSERT INTO `ftpd` (`User`, `status`, `Password`, `Uid`, `Gid`, `Dir`, `ULBandwidth`, `DLBandwidth`, `comment`, `ipaccess`, `QuotaSize`, `QuotaFiles`) VALUES ('blog', '1', MD5('blog_passwd'), '1001', '1001', '/var/project/vovk.cf/', '100', '100', '', '*', '50', '0');
+INSERT INTO `ftpd` (`User`, `status`, `Password`, `Uid`, `Gid`, `Dir`, `ULBandwidth`, `DLBandwidth`, `comment`, `ipaccess`, `QuotaSize`, `QuotaFiles`) VALUES ('blog', '1', MD5('blog_passwd'), '2000', '2000', '/var/project/vovk.cf/', '100', '100', '', '*', '50', '0');
 
 	
 vim /etc/pure-ftpd/pure-ftpd.conf
@@ -499,17 +512,19 @@ vim /etc/pure-ftpd/pure-ftpd.conf
 ChrootEveryone              yes
 MySQLConfigFile               /etc/pure-ftpd/pureftpd-mysql.conf
 CreateHomeDir               yes
+NoAnonymous                  yes
+UnixAuthentication                  no
+PassivePortRange             40110 40210
+
 
 cp  /etc/pure-ftpd/pureftpd-mysql.conf  /etc/pure-ftpd/pureftpd-mysql.conf-bkp
 
-vim /etc/pure-ftpd/pureftpd-mysql.conf
-
-MYSQLSocket      /var/lib/mysql/mysql.sock
+echo 'MYSQLSocket      /var/lib/mysql/mysql.sock
 MYSQLServer     localhost
 MYSQLPort       3306
-MYSQLUser       [сюда_вписать_имя_юзера_mysql]
-MYSQLPassword   [сюда_вписать_пароль_юзера_mysql]
-MYSQLDatabase   [сюда_вписать_имя_базы_mysql]
+MYSQLUser       ftp_usr
+MYSQLPassword   ftp_passwd
+MYSQLDatabase   ftp_db
 #MYSQLCrypt md5, cleartext, crypt() or password() - md5 is VERY RECOMMENDABLE uppon cleartext
 MYSQLCrypt      md5
 MYSQLGetPW      SELECT Password FROM ftpd WHERE User="\L" AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
@@ -519,8 +534,10 @@ MYSQLGetDir     SELECT Dir FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess
 MySQLGetBandwidthUL SELECT ULBandwidth FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
 MySQLGetBandwidthDL SELECT DLBandwidth FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
 MySQLGetQTASZ   SELECT QuotaSize FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
-MySQLGetQTAFS   SELECT QuotaFiles FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")
+MySQLGetQTAFS   SELECT QuotaFiles FROM ftpd WHERE User="\L"AND status="1" AND (ipaccess = "*" OR ipaccess LIKE "\R")' >> /etc/pure-ftpd/pureftpd-mysql.conf
 
+
+systemctl restart pure-ftpd
 
 
 MUNIN
@@ -528,14 +545,16 @@ MUNIN
 
 https://www.webfoobar.com/index.php/node/48
 
-yum install munin munin-node
+
+
+yum install -y munin munin-node
 
 systemctl enable munin-node && systemctl start munin-node
 
 echo 'graph_strategy cgi
 html_strategy cgi' > /etc/munin/conf.d/00-munincustom.conf
 
-yum install spawn-fcgi fcgi-devel autoconf automake gcc
+yum install -y spawn-fcgi fcgi-devel autoconf automake gcc
 
 cd /usr/src/
 wget http://github.com/gnosek/fcgiwrap/tarball/master -O fcgiwrap.tar.gz
@@ -675,7 +694,7 @@ FCGI_USER=nginx
 FCGI_GROUP=munin
 FCGI_WORKERS=1
 FCGI_EXTRA_OPTIONS="-M 0700"
-OPTIONS="-u $FCGI_USER -g $FCGI_GROUP -s $FCGI_SOCKET -S $FCGI_EXTRA_OPTIONS -F $FCGI_WORKERS -P $PID_FILE -- $FCGI_PROGRAM"' > /etc/sysconfig/spawn-fcgi-munin-html
+OPTIONS="-u $FCGI_USER -g $FCGI_GROUP -s $FCGI_SOCKET -S $FCGI_EXTRA_OPTIONS -F $FCGI_WORKERS -P $PID_FILE -- $FCGI_PROGRAM"' > /etc/sysconfig/spawn-fcgi-munin-html 
 
 
 service spawn-fcgi-munin-html start
@@ -860,4 +879,72 @@ echo 'server {
 
 htpasswd -c /var/www/html/munin/.htpasswd admin
 
+
+echo 'server {
+    listen       80 default;
+    server_name  _;
+    location / {
+        return 404;
+    }
+}' > /etc/nginx/conf.d/default.conf
+
+
+echo 'server {
+    listen       80;
+    server_name  localhost;
+location / {
+root   /var/www/html;
+index index.html;
+}
+
+location /nginx_status {
+stub_status on;
+access_log   on;
+allow 127.0.0.1;
+deny all;
+}
+}' > /etc/nginx/conf.d/localhost.conf
+
+ ln -s /usr/share/munin/plugins/nginx_status /etc/munin/plugins/
+
+echo '[nginx*]
+user root
+env.url http://localhost/nginx_status' >> /etc/munin/plugin-conf.d/munin-node
+
+
+
+chown -R nginx:munin /var/log/munin/ && chown -R nginx:munin /var/lib/munin/cgi-tmp
+
 systemctl restart munin-node nginx
+/etc/init.d/spawn-fcgi-munin-graph restart && /etc/init.d/spawn-fcgi-munin-html restart
+
+
+
+while true; do curl -IL munin.vovk.cf -u admin:munin; done
+
+
+SSL
+--------------
+
+
+
+
+
+echo 'server {
+        listen 80;
+        server_name  munin.vovk.cf;
+
+        access_log /var/log/nginx/munin.vovk.cf_access.log        combined;
+        error_log /var/log/nginx/munin.vovk.cf_error.log;
+
+        root  /var/www/html/munin;
+        index   index.html;
+
+location /munin {
+        alias   /var/www/html/munin/;
+        index  index.php index.html index.htm;
+        location ~* \.(png|jpg|jpeg|gif|ico)$ {
+        }
+}
+
+}' > /etc/nginx/conf.d/munin.vovk.cf.conf
